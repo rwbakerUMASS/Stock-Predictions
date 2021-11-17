@@ -1,4 +1,4 @@
-import tensorflow as tf
+# import tensorflow as tf
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -7,31 +7,23 @@ import matplotlib.pyplot as plt
 import datetime
 from finta import TA
 from pandas_datareader import data as pdr
-
-"""
-Defining some constants for data mining
-"""
-
-NUM_DAYS = 100     # The number of days of historical data to retrieve
-INTERVAL = '1d'     # Sample rate of historical data
-symbol = 'SPY'      # Symbol of the desired stock
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import KFold
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 # List of symbols for technical indicators
 INDICATORS = ['RSI', 'MACD', 'STOCH','ADL', 'ATR', 'MOM', 'MFI', 'ROC', 'OBV', 'CCI', 'EMV', 'VORTEX']
 
-"""
-Next we pull the historical data using yfinance
-Rename the column names because finta uses the lowercase names
-"""
+def get_stock_data(symbol,num_days=10000,interval='1d'):
 
-start = (datetime.date.today() - datetime.timedelta( NUM_DAYS ) )
-end = datetime.datetime.today()
+    start = (datetime.date.today() - datetime.timedelta(num_days) )
+    end = datetime.datetime.today()
 
-data = yf.download(symbol, start=start, end=end, interval=INTERVAL)
-data.rename(columns={"Close": 'close', "High": 'high', "Low": 'low', 'Volume': 'volume', 'Open': 'open'}, inplace=True)
-print(data['open'].to_numpy())
+    data = yf.download(symbol, start=start, end=end, interval=interval)
+    data.rename(columns={"Close": 'close', "High": 'high', "Low": 'low', 'Volume': 'volume', 'Open': 'open'}, inplace=True)
+    return data
 
-def _get_indicator_data(data):
+def get_indicator_data(data):
     """
     Function that uses the finta API to calculate technical indicators used as the features
     :return:
@@ -54,7 +46,6 @@ def _get_indicator_data(data):
     data['normVol'] = data['volume'] / data['volume'].ewm(5).mean()
 
     # Remove columns that won't be used as features
-    del (data['open'])
     del (data['high'])
     del (data['low'])
     del (data['volume'])
@@ -62,6 +53,52 @@ def _get_indicator_data(data):
     
     return data
 
-data = _get_indicator_data(data)
-print(data.to_numpy())
+def get_x_y(data):
+    y = np.ceil((data['open']-data['close']).clip(lower=0, upper=1)).to_numpy()
+    X = data.copy()
+    del (X['open'])
+    del (X['close'])
+    X = X.to_numpy()
+    return X,y
 
+data = get_stock_data('TSLA')
+data = get_indicator_data(data)
+data = data.iloc[16:]
+data = data.dropna()
+test_data = data.iloc[-250:]
+data = data.iloc[:-251]
+X_train, y_train = get_x_y(data)
+X_test, y_test = get_x_y(test_data)
+today_data = data.iloc[-2:]
+del (today_data['open'])
+del (today_data['close'])
+
+rf = RandomForestClassifier()
+rf.fit(X_train,y_train)
+# print(rf.predict(today_data.to_numpy()))
+print(rf.score(X_test,y_test))
+y_pred = rf.predict(X_test)
+print(f1_score(y_test,y_pred))
+print(confusion_matrix(y_test,y_pred))
+
+k=5
+kfold = KFold(k)
+acc_score = []
+model = RandomForestClassifier()
+X=X_train
+y=y_train 
+
+for train_index , test_index in kfold.split(X):
+    X_train , X_test = X[train_index,:],X[test_index,:]
+    y_train , y_test = y[train_index] , y[test_index]
+     
+    model.fit(X_train,y_train)
+    pred_values = model.predict(X_test)
+     
+    acc = accuracy_score(pred_values , y_test)
+    acc_score.append(acc)
+     
+avg_acc_score = sum(acc_score)/k
+ 
+print('accuracy of each fold - {}'.format(acc_score))
+print('Avg accuracy : {}'.format(avg_acc_score))
