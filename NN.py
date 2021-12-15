@@ -14,14 +14,16 @@ class Module(nn.Module):
     def __init__(self,n_dims):
         super(Module, self).__init__()
         # TODO: define the layers of the network
-        self.lin1 = nn.Linear(n_dims,2048)
-        self.lin2 = nn.Linear(2048,64)
-        self.lin3 = nn.Linear(64,8)
-        self.out = nn.Linear(8,1)
+        self.lin1 = nn.Linear(n_dims,8192)
+        self.lin2 = nn.Linear(8192,256)
+        self.drop = nn.Dropout(p=0.5)
+        self.lin3 = nn.Linear(256,16)
+        self.out = nn.Linear(16,1)
 
     def forward(self, x):
         # TODO: define the forward pass of the network using the layers you defined in constructor
         x=F.relu(self.lin1(x))
+        x=self.drop(x)
         x=F.relu(self.lin2(x))
         x=F.sigmoid(self.lin3(x))
         x=self.out(x)
@@ -70,20 +72,18 @@ def main():
         y_train_pred = model(train_X)
         y_test_pred = model(test_X)
         loss = torch.sqrt(mse(y_train_pred, train_Y))
-        print("Epoch ", epoch, "MSE: ", loss.item())
+        print(f'Epoch: {epoch+1}\n-------------------------------\nTrain RMSE: {loss.item():7f}')
         train_mse.append(loss.item())
         test_loss = torch.sqrt(mse(y_test_pred,test_Y))
         test_mse.append(test_loss.item())
-        
+        print(f'Test RMSE:  {test_loss.item():>7f}\n-------------------------------')
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-    torch.save(model.state_dict(), "mnist_cnn.pt")
     
     #TODO: Plot train and test accuracy vs epoch
-    plt.plot(range(NumEpochs), train_mse, label= 'Train Acc')
-    plt.plot(range(NumEpochs), test_mse, label = 'Test Acc')
+    plt.plot(range(NumEpochs), train_mse, label= 'Train RMSE')
+    plt.plot(range(NumEpochs), test_mse, label = 'Test RMSE')
     plt.legend()
     plt.show()
 
